@@ -32,6 +32,7 @@ export type UserProfileError = {
 export type UserProfileResponse = UserProfileSuccess | UserProfileError;
 export type UserRole = "RESIDENT" | "ADMIN" | "MODERATOR";
 export type AccountStatus = "ACTIVE" | "SUSPENDED" | "DEACTIVATED";
+export type AuthProvider = "PASSWORD" | "GOOGLE";
 export type ModeratorPermission =
   | "MANAGE_USERS"
   | "MANAGE_SURVEILLANCE"
@@ -56,6 +57,10 @@ export interface User {
   accountStatus: AccountStatus;
   permissions: ModeratorPermission[];
   isVerified: boolean;
+  authProvider?: AuthProvider;
+  // Only on the signed-in user's own profile: true for the owner named by the
+  // backend's SUPER_ADMIN_EMAIL.
+  isSuperAdmin?: boolean;
   socialStats: {
     totalFollowers: number;
     totalFollowing: number;
@@ -88,6 +93,15 @@ export type UserSummary = Pick<
   | "profilePicture"
   | "createdAt"
 >;
+
+export type AdminSummary = Pick<
+  User,
+  "_id" | "name" | "email" | "accountStatus" | "createdAt"
+> & {
+  authProvider?: AuthProvider;
+  lastLoginAt?: string | null;
+  isSuperAdmin: boolean;
+};
 
 // Type for the "Create User" form
 export type CreateUserFormData = {
