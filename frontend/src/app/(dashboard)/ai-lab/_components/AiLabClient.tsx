@@ -115,6 +115,11 @@ const MODEL_ACCENTS: Record<
     color: "text-rose-600",
     surface: "bg-rose-500/10",
   },
+  "fire-smoke-rfdetr-small": {
+    icon: Flame,
+    color: "text-orange-600",
+    surface: "bg-orange-500/10",
+  },
   "fire-smoke-yolov8n": {
     icon: Flame,
     color: "text-orange-600",
