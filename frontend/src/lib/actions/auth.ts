@@ -8,6 +8,17 @@ import { createSessionToken } from "../auth-token";
 import { fetchWithAuth, handleApiResponse } from "../server-utils";
 import type { LoginResponse } from "@/models";
 
+async function storeSessionCookie(token: string) {
+  const cookieStore = await cookies();
+  cookieStore.set("token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 30,
+    path: "/",
+  });
+}
+
 function secureEqual(value: string, expected: string): boolean {
   const valueBuffer = Buffer.from(value);
   const expectedBuffer = Buffer.from(expected);
@@ -45,14 +56,7 @@ async function tryBootstrapAdmin(credentials: {
     },
     jwtSecret
   );
-  const cookieStore = await cookies();
-  cookieStore.set("token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
-    path: "/",
-  });
+  await storeSessionCookie(token);
 
   return true;
 }
@@ -88,14 +92,7 @@ export async function login(credentials: { email: string; password: string }) {
     const data: LoginResponse = await res.json();
 
     if (data.success && data.user && data.token) {
-      const cookieStore = await cookies();
-      cookieStore.set("token", data.token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 30,
-        path: "/",
-      });
+      await storeSessionCookie(data.token);
 
       return {
         success: true,
