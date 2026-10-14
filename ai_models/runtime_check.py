@@ -61,6 +61,13 @@ def main() -> int:
             "assert m is not None",
         ),
         (
+            "fire-smoke-rfdetr-small",
+            "from rfdetr import RFDETR; "
+            "m=RFDETR.from_checkpoint("
+            "'fire_smoke_RFDETR/checkpoint_best_total.pth'); "
+            "assert m.class_names == ['smoke', 'fire']",
+        ),
+        (
             "violence-x3d",
             "import numpy, torch; "
             "from numpy._core.multiarray import scalar; "
