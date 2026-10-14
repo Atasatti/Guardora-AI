@@ -49,9 +49,10 @@ class ViolenceRuntime:
             )
 
         self.torch = torch
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = ViolenceX3D()
         self.model.load_state_dict(checkpoint["model"], strict=True)
-        self.model.eval()
+        self.model.to(self.device).eval()
         self.reported_metrics = checkpoint.get("final_metrics", {})
 
     @staticmethod
@@ -115,6 +116,7 @@ class ViolenceRuntime:
             .permute(3, 0, 1, 2)
             .unsqueeze(0)
             .contiguous()
+            .to(self.device)
         )
 
         with self.torch.inference_mode():
