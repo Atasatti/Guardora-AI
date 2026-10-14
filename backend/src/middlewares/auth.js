@@ -2,6 +2,7 @@ import ErrorHandler from "../utils/ErrorHandler.js";
 import catchAsyncErrors from "./catchAsyncErrors.js";
 import jwt from "jsonwebtoken";
 import User, { MODERATOR_PERMISSIONS } from "../models/user.js";
+import { isSuperAdmin } from "../utils/superAdmin.js";
 
 const isUserAuthenticated = catchAsyncErrors(async (req, res, next) => {
   const bypassEnabled =
@@ -93,4 +94,20 @@ const authorizePermissions = (...permissions) => {
   };
 };
 
-export { isUserAuthenticated, authorizeRoles, authorizePermissions };
+// Only the owner named by SUPER_ADMIN_EMAIL may grant or revoke administrator
+// access.
+const requireSuperAdmin = (req, res, next) => {
+  if (!isSuperAdmin(req.user)) {
+    return next(
+      new ErrorHandler("Only the owner can manage administrators", 403)
+    );
+  }
+  next();
+};
+
+export {
+  isUserAuthenticated,
+  authorizeRoles,
+  authorizePermissions,
+  requireSuperAdmin,
+};
