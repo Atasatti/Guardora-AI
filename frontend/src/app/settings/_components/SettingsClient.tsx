@@ -36,9 +36,11 @@ import {
   Moon,
   Sun,
   Camera,
+  Crown,
 } from "lucide-react";
 import { STORAGE_BASE_URL } from "@/lib/api-client";
 import { useTheme } from "next-themes";
+import AdminsPanel from "./AdminsPanel";
 
 interface Props {
   user: User;
@@ -104,10 +106,14 @@ export default function SettingsClient({ user }: Props) {
 
   const handleLogout = async () => await logout();
 
+  const isAdmin = user.role === "ADMIN";
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-8">
+        <TabsList
+          className={`grid w-full mb-8 ${isAdmin ? "grid-cols-4" : "grid-cols-3"}`}
+        >
           <TabsTrigger value="general" className="flex items-center gap-2">
             <UserIcon className="h-4 w-4" /> General
           </TabsTrigger>
@@ -117,6 +123,11 @@ export default function SettingsClient({ user }: Props) {
           <TabsTrigger value="security" className="flex items-center gap-2">
             <Shield className="h-4 w-4" /> Security
           </TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="admins" className="flex items-center gap-2">
+              <Crown className="h-4 w-4" /> Admins
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="general">
@@ -304,6 +315,12 @@ export default function SettingsClient({ user }: Props) {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="admins">
+            <AdminsPanel isOwner={Boolean(user.isSuperAdmin)} />
+          </TabsContent>
+        )}
       </Tabs>
 
       <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
