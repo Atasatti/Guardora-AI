@@ -35,6 +35,13 @@ const userSchema = new mongoose.Schema(
       minlength: 6,
       select: false,
     },
+    // GOOGLE accounts were created for Google sign-in and have a random
+    // password nobody knows.
+    authProvider: {
+      type: String,
+      enum: ["PASSWORD", "GOOGLE"],
+      default: "PASSWORD",
+    },
     phoneNumber: {
       type: String,
       required: true,
