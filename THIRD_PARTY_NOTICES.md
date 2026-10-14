@@ -7,13 +7,17 @@ AI models, model weights, or other third-party material.
 ## AI model pack
 
 The model manifest in `ai_models/models.json` records immutable upstream
-revisions and file checksums.
+revisions and file checksums. `ai_models/MODEL_LICENSES.md` records which
+models may be used commercially.
 
-- Weapon Threat YOLOv8n — upstream declares MIT.
+- Weapon Threat YOLOv8n — upstream declares MIT; trained with and run on
+  Ultralytics, which is AGPL-3.0.
 - Fire-Smoke YOLOv8n — upstream declares AGPL-3.0.
 - Violence X3D — upstream model card describes MIT with
-  research/non-commercial wording; the upstream terms must be reviewed before
-  deployment.
+  research/non-commercial wording; trained on RWF-2000, which bars commercial
+  use without the owners' approval.
+- RF-DETR Small fire/smoke — RF-DETR is Apache-2.0; fine-tuned by Guardora on
+  the D-Fire dataset (CC0-1.0).
 - OpenCV YuNet — MIT.
 - OpenCV SFace — Apache-2.0.
 
