@@ -38,3 +38,9 @@ yarn-error.log*
 # Local model output
 ai_models/runs/
 ai_models/outputs/
+
+# Trained RF-DETR checkpoints. 127 MB each, over GitHub's 100 MB hard limit,
+# so unlike the small pretrained weights these are not committed. They are not
+# published either, so copy them in by hand (see ai_models/README.md).
+ai_models/fire_smoke_rfdetr/*.pth
+ai_models/fire_smoke_RFDETR/*.pth
