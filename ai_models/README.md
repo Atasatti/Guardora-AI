@@ -126,6 +126,23 @@ GUARDORA_AI_STREAM_TOKEN_SECRET="$(openssl rand -hex 32)" \
   --host 127.0.0.1 --port 8001
 ```
 
+## Hugging Face Space
+
+The service runs as its own Docker Space, `Atasatti20/Guardora_AI_models`,
+separate from the API Space so that only it ever needs a GPU. Commit first,
+then:
+
+```bash
+.venv-ai/bin/python deploy_space.py          # code, weights and demo videos
+.venv-ai/bin/python space_hardware.py gpu    # before a demo: T4, 30-minute sleep timer
+.venv-ai/bin/python space_hardware.py cpu    # afterwards: free, slower
+.venv-ai/bin/python space_hardware.py pause  # or: free, AI features offline
+```
+
+The Space's `GUARDORA_AI_SERVICE_API_KEY` and `GUARDORA_AI_STREAM_TOKEN_SECRET`
+secrets must equal the API Space's `AI_SERVICE_API_KEY` and
+`AI_STREAM_TOKEN_SECRET`, and `GUARDORA_BACKEND_API_URL` points at the API.
+
 ## AI Model Lab
 
 The Guardora dashboard exposes an admin-only `/ai-lab` route for controlled
