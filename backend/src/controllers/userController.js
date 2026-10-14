@@ -9,12 +9,20 @@ import {
 } from "../config/uploads.js";
 import { MODERATOR_PERMISSIONS } from "../models/user.js";
 import { recordAudit } from "../utils/audit.js";
+import { verifyGoogleCredential } from "../utils/googleAuth.js";
 import { isSuperAdminEmail } from "../utils/superAdmin.js";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
 const hashActivationCode = (code) =>
   crypto.createHash("sha256").update(String(code)).digest("hex");
+
+const GOOGLE_ACCOUNT_DEFAULTS = {
+  authProvider: "GOOGLE",
+  phoneNumber: "Not provided",
+  unitNumber: "Administration",
+};
+const unusablePassword = () => crypto.randomBytes(32).toString("hex");
 
 // Only Google sign-in may create the owner's account. Otherwise someone could
 // register the owner's address with a password of their own and inherit
@@ -300,6 +308,81 @@ const loginUser = catchAsyncErrors(async (req, res, next) => {
   user.password = undefined;
   user.failedLoginAttempts = undefined;
   user.lockUntil = undefined;
+  sendToken(user, 200, res);
+});
+
+// The owner is always an active administrator. If someone else held the
+// address before the owner first signed in with Google, their password is
+// replaced so it cannot reach the access being granted.
+const provisionOwner = (user, profile) => {
+  if (!user) {
+    return new User({
+      ...GOOGLE_ACCOUNT_DEFAULTS,
+      name: profile.name,
+      email: profile.email,
+      password: unusablePassword(),
+      role: "ADMIN",
+    });
+  }
+
+  if (user.role !== "ADMIN") {
+    user.password = unusablePassword();
+  }
+  user.role = "ADMIN";
+  user.permissions = [];
+  user.accountStatus = "ACTIVE";
+  return user;
+};
+
+// Google sign-in is for administrators only: the owner named by
+// SUPER_ADMIN_EMAIL, and the users the owner has made administrators.
+// Residents and moderators keep signing in with a password.
+const googleLogin = catchAsyncErrors(async (req, res, next) => {
+  const credential = String(req.body.credential || "");
+  if (!credential) {
+    return next(new ErrorHandler("Google credential is required", 400));
+  }
+
+  const profile = await verifyGoogleCredential(credential);
+  let user = await User.findOne({ email: profile.email });
+
+  if (isSuperAdminEmail(profile.email)) {
+    user = provisionOwner(user, profile);
+  } else if (!user || user.role !== "ADMIN") {
+    await recordAudit({
+      req,
+      action: "LOGIN_FAILED",
+      targetModel: "Authentication",
+      details: { email: profile.email, method: "GOOGLE", reason: "NOT_ADMIN" },
+    });
+    return next(
+      new ErrorHandler(
+        "This Google account is not a Guardora administrator. Residents and moderators sign in with email and password.",
+        403
+      )
+    );
+  } else if (user.accountStatus && user.accountStatus !== "ACTIVE") {
+    return next(
+      new ErrorHandler(
+        `Account is ${user.accountStatus.toLowerCase()}. Contact the owner.`,
+        403
+      )
+    );
+  }
+
+  // Google has just proved the address belongs to this person.
+  user.isVerified = true;
+  user.lastLoginAt = new Date();
+  await user.save();
+  await recordAudit({
+    req: { user, headers: req.headers, socket: req.socket },
+    action: "LOGIN_SUCCEEDED",
+    targetModel: "User",
+    targetId: user._id,
+    details: { method: "GOOGLE" },
+  });
+
+  user.password = undefined;
   sendToken(user, 200, res);
 });
 
@@ -931,6 +1014,7 @@ export {
   activateUser,
   resendActivationCode,
   loginUser,
+  googleLogin,
   logoutUser,
   getUserInfo,
   updateUserInfo,

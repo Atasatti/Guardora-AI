@@ -10,6 +10,7 @@ import {
   activateUser,
   resendActivationCode,
   loginUser,
+  googleLogin,
   logoutUser,
   getUserInfo,
   updateUserInfo,
@@ -132,6 +133,7 @@ router.post(
 router.post("/activation", authLimiter, activateUser);
 router.post("/resend-activation", authLimiter, resendActivationCode);
 router.post("/login", authLimiter, loginUser);
+router.post("/google-login", authLimiter, googleLogin);
 router.post("/follow/:userId", isUserAuthenticated, toggleFollowUser);
 router.get("/:id", isUserAuthenticated, getUserById);
 router.get("/", isUserAuthenticated, getUsers);
