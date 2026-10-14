@@ -1,0 +1,11 @@
+# Full model pack: the face models from requirements.txt plus the YOLO
+# weapon/fire detectors, the X3D violence classifier and the RF-DETR fire/smoke
+# detector. rfdetr needs Python 3.10+. See ai_models/MODEL_LICENSES.md for
+# which of these may be used commercially.
+-r requirements.txt
+torch>=2.5,<3
+torchvision>=0.20,<1
+ultralytics>=8.3,<9
+pytorchvideo==0.1.5
+rfdetr>=1.9,<1.10
+pyyaml>=6,<7
