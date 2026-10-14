@@ -114,6 +114,43 @@ export async function login(credentials: { email: string; password: string }) {
   }
 }
 
+// Exchanges a Google Identity Services credential for a Guardora session.
+// The backend verifies it and admits administrators only.
+export async function loginWithGoogle(credential: string) {
+  try {
+    if (!API_BASE_URL) {
+      return { success: false, message: "Google sign-in is not available" };
+    }
+
+    const res = await fetch(`${API_BASE_URL}/users/google-login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ credential }),
+      cache: "no-store",
+    });
+    const data: LoginResponse = await res.json();
+
+    if (!res.ok || !data.success || !data.user || !data.token) {
+      return {
+        success: false,
+        message: data.message || "Google sign-in failed.",
+      };
+    }
+
+    await storeSessionCookie(data.token);
+    return {
+      success: true,
+      message: "Login successful",
+      role: data.user.role,
+    };
+  } catch (error) {
+    console.error("Google login action error:", error);
+    return { success: false, message: "Google sign-in failed." };
+  }
+}
+
 export async function logout() {
   const cookieStore = await cookies();
   cookieStore.set("token", "", { expires: new Date(0) });
