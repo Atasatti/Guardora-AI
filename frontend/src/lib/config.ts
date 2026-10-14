@@ -22,5 +22,8 @@ export const config = {
     faceWebSocket: withoutTrailingSlash(process.env.NEXT_PUBLIC_FACE_WS_URL),
     webcamFps: positiveInteger(process.env.NEXT_PUBLIC_AI_WEBCAM_FPS, 3),
   },
+  auth: {
+    googleClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() || "",
+  },
   isDevelopment: process.env.NODE_ENV === "development",
 } as const;
