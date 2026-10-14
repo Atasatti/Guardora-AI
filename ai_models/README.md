@@ -1,3 +1,13 @@
+---
+title: Guardora AI models
+emoji: 🛡️
+colorFrom: blue
+colorTo: gray
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Guardora AI model pack
 
 Guardora uses local, open-source AI wherever a suitable model exists. Every
