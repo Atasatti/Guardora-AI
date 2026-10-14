@@ -6,6 +6,7 @@
       "task": "weapon and threat object detection",
       "local_dir": "weapon_threat_yolov8n",
       "license": "MIT",
+      "commercial_use": false,
       "runtime_license": "Ultralytics runtime is AGPL-3.0 or requires an enterprise license",
       "deployment_status": "demo_only",
       "source": {
@@ -33,6 +34,7 @@
       "task": "fire and smoke object detection",
       "local_dir": "fire_smoke_yolov8n",
       "license": "AGPL-3.0",
+      "commercial_use": false,
       "runtime_license": "Ultralytics runtime is AGPL-3.0 or requires an enterprise license",
       "deployment_status": "demo_only",
       "source": {
@@ -58,6 +60,7 @@
       "task": "fire and smoke object detection",
       "local_dir": "fire_smoke_RFDETR",
       "license": "Apache-2.0 (RF-DETR Small), trained by Guardora on D-Fire (CC0-1.0)",
+      "commercial_use": true,
       "deployment_status": "production_candidate",
       "source": {
         "provider": "Guardora training run (not published)",
@@ -78,7 +81,8 @@
       "id": "violence-x3d",
       "task": "video violence classification",
       "local_dir": "violence_x3d",
-      "license": "Source card describes MIT with research/non-commercial wording",
+      "license": "MIT tag, but card limits use to research/non-commercial; RWF-2000 training data bars commercial use",
+      "commercial_use": false,
       "deployment_status": "research_only",
       "source": {
         "provider": "Hugging Face",
@@ -105,6 +109,7 @@
       "task": "face detection and landmarks",
       "local_dir": "face_yunet",
       "license": "MIT",
+      "commercial_use": true,
       "deployment_status": "production_candidate",
       "source": {
         "provider": "Hugging Face",
@@ -137,6 +142,7 @@
       "task": "face embedding and recognition",
       "local_dir": "face_sface",
       "license": "Apache-2.0",
+      "commercial_use": true,
       "deployment_status": "production_candidate",
       "source": {
         "provider": "Hugging Face",
