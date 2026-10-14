@@ -794,6 +794,25 @@ def health(request: Request) -> dict[str, Any]:
     }
 
 
+# Mirrors ai_models/MODEL_LICENSES.md: (license, commercial use permitted).
+MODEL_LICENSES: dict[str, tuple[str, bool]] = {
+    "face-detection-yunet": ("MIT", True),
+    "face-recognition-sface": ("Apache-2.0", True),
+    RFDETR_FIRE_ID: ("Apache-2.0, CC0 data", True),
+    "weapon-threat-yolov8n": ("AGPL-3.0 (Ultralytics)", False),
+    "fire-smoke-yolov8n": ("AGPL-3.0", False),
+    "violence-x3d": ("Research only (RWF-2000)", False),
+}
+
+
+def _license(model_id: str) -> dict[str, Any]:
+    name, commercial = MODEL_LICENSES[model_id]
+    return {
+        "license": f"{name} · {'commercial OK' if commercial else 'non-commercial'}",
+        "commercialUse": commercial,
+    }
+
+
 def _detector_status(model_id: str) -> dict[str, Any]:
     ready = model_id in detection_runtime.models
     return {
@@ -804,42 +823,19 @@ def _detector_status(model_id: str) -> dict[str, Any]:
 
 @app.get("/models", dependencies=[Depends(require_service_key)])
 def models() -> dict[str, Any]:
+    statuses = {
+        "face-detection-yunet": "ready" if face_runtime else "error",
+        "face-recognition-sface": "ready" if face_runtime else "error",
+        "violence-x3d": "ready" if violence_runtime is not None else "disabled",
+        **{
+            model_id: _detector_status(model_id)["status"]
+            for model_id in (RFDETR_FIRE_ID, *YOLO_CHECKPOINTS)
+        },
+    }
     return {
-        "active": [
-            {
-                "id": "face-detection-yunet",
-                "license": "MIT",
-                "status": "ready" if face_runtime else "error",
-            },
-            {
-                "id": "face-recognition-sface",
-                "license": "Apache-2.0",
-                "status": "ready" if face_runtime else "error",
-            },
-            {
-                "id": RFDETR_FIRE_ID,
-                "license": "Apache-2.0",
-                "status": _detector_status(RFDETR_FIRE_ID)["status"],
-            },
-        ],
-        "restricted": [
-            {
-                "id": "weapon-threat-yolov8n",
-                "license": "Ultralytics runtime: AGPL-3.0 or enterprise",
-                "status": "demo opt-in" if ALLOW_AGPL_MODELS else "disabled",
-            },
-            {
-                "id": "fire-smoke-yolov8n",
-                "license": "AGPL-3.0",
-                "status": "demo opt-in" if ALLOW_AGPL_MODELS else "disabled",
-            },
-            {
-                "id": "violence-x3d",
-                "license": "Research checkpoint; deployment terms need review",
-                "status": (
-                    "research opt-in" if violence_runtime is not None else "disabled"
-                ),
-            },
+        "models": [
+            {"id": model_id, **_license(model_id), "status": statuses[model_id]}
+            for model_id in MODEL_LICENSES
         ],
         "trainingRequired": ["RF-DETR weapon/threat", "X3D violence"],
     }
@@ -854,7 +850,7 @@ def lab_models() -> dict[str, Any]:
                 "name": "Weapon & threat detection",
                 "description": "Detects guns, knives, grenades and explosives.",
                 "input": ["image", "video"],
-                "license": "AGPL runtime / enterprise license required",
+                **_license("weapon-threat-yolov8n"),
                 **_detector_status("weapon-threat-yolov8n"),
             },
             {
@@ -862,7 +858,7 @@ def lab_models() -> dict[str, Any]:
                 "name": "Fire & smoke detection (RF-DETR)",
                 "description": "Detects visible fire and smoke; used on live streams.",
                 "input": ["image", "video"],
-                "license": "Apache-2.0 (D-Fire CC0 data)",
+                **_license(RFDETR_FIRE_ID),
                 **_detector_status(RFDETR_FIRE_ID),
             },
             {
@@ -870,7 +866,7 @@ def lab_models() -> dict[str, Any]:
                 "name": "Fire & smoke detection (YOLOv8n)",
                 "description": "Detects visible fire and smoke in CCTV frames.",
                 "input": ["image", "video"],
-                "license": "AGPL-3.0 demo only",
+                **_license("fire-smoke-yolov8n"),
                 **_detector_status("fire-smoke-yolov8n"),
             },
             {
@@ -878,7 +874,7 @@ def lab_models() -> dict[str, Any]:
                 "name": "Violence activity classification",
                 "description": "Analyzes temporal 4-second windows with X3D-M.",
                 "input": ["video"],
-                "license": "Research evaluation only",
+                **_license("violence-x3d"),
                 "status": "ready" if violence_runtime is not None else "disabled",
                 "error": None if violence_runtime is not None else violence_runtime_error,
             },
@@ -887,7 +883,7 @@ def lab_models() -> dict[str, Any]:
                 "name": "Banned-person recognition",
                 "description": "YuNet face detection with SFace gallery matching.",
                 "input": ["image"],
-                "license": "MIT + Apache-2.0",
+                **_license("face-recognition-sface"),
                 "status": "ready" if face_runtime is not None else "error",
                 "error": face_runtime_error or None,
             },
