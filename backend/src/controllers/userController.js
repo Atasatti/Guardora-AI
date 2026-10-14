@@ -10,13 +10,18 @@ import {
 import { MODERATOR_PERMISSIONS } from "../models/user.js";
 import { recordAudit } from "../utils/audit.js";
 import { verifyGoogleCredential } from "../utils/googleAuth.js";
-import { isSuperAdmin, isSuperAdminEmail } from "../utils/superAdmin.js";
+import {
+  isSuperAdmin,
+  isSuperAdminEmail,
+  superAdminEmail,
+} from "../utils/superAdmin.js";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
 const hashActivationCode = (code) =>
   crypto.createHash("sha256").update(String(code)).digest("hex");
 
+const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const GOOGLE_ACCOUNT_DEFAULTS = {
   authProvider: "GOOGLE",
   phoneNumber: "Not provided",
@@ -893,6 +898,111 @@ const adminDeleteUser = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+// Every administrator except the owner, who comes from SUPER_ADMIN_EMAIL and
+// is reported separately in case they have not signed in yet.
+const listAdmins = catchAsyncErrors(async (req, res) => {
+  const admins = await User.find({ role: "ADMIN" })
+    .select("name email accountStatus authProvider lastLoginAt createdAt")
+    .sort({ createdAt: 1 });
+
+  res.status(200).json({
+    success: true,
+    ownerEmail: superAdminEmail() || null,
+    admins: admins.map((admin) => ({
+      ...admin.toJSON(),
+      isSuperAdmin: isSuperAdminEmail(admin.email),
+    })),
+  });
+});
+
+const addAdmin = catchAsyncErrors(async (req, res, next) => {
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const name = String(req.body.name || "").trim();
+
+  if (!EMAIL_PATTERN.test(email)) {
+    return next(new ErrorHandler("Enter a valid email address", 400));
+  }
+  if (isSuperAdminEmail(email)) {
+    return next(new ErrorHandler("The owner is already an administrator", 400));
+  }
+
+  let user = await User.findOne({ email });
+  if (user?.role === "ADMIN") {
+    return next(
+      new ErrorHandler("This person is already an administrator", 409)
+    );
+  }
+
+  // New administrators get a Google-only account. An existing resident or
+  // moderator keeps their account and password and gains admin access.
+  if (!user) {
+    user = new User({
+      ...GOOGLE_ACCOUNT_DEFAULTS,
+      name: name || email.split("@")[0],
+      email,
+      password: unusablePassword(),
+      isVerified: true,
+    });
+  }
+  user.role = "ADMIN";
+  user.permissions = [];
+  if (user.authProvider === "GOOGLE") {
+    user.accountStatus = "ACTIVE";
+  }
+  await user.save();
+
+  await recordAudit({
+    req,
+    action: "ADMIN_GRANTED",
+    targetModel: "User",
+    targetId: user._id,
+    details: { email },
+  });
+
+  user.password = undefined;
+  res.status(201).json({
+    success: true,
+    admin: user,
+  });
+});
+
+const removeAdmin = catchAsyncErrors(async (req, res, next) => {
+  const user = await User.findById(req.params.id);
+
+  if (!user || user.role !== "ADMIN") {
+    return next(new ErrorHandler("Administrator not found", 404));
+  }
+  if (isSuperAdminEmail(user.email)) {
+    return next(
+      new ErrorHandler(
+        "The owner's access comes from SUPER_ADMIN_EMAIL and cannot be removed here",
+        400
+      )
+    );
+  }
+
+  user.role = "RESIDENT";
+  user.permissions = [];
+  // A Google-only account existed solely for administrator access.
+  if (user.authProvider === "GOOGLE") {
+    user.accountStatus = "DEACTIVATED";
+  }
+  await user.save();
+
+  await recordAudit({
+    req,
+    action: "ADMIN_REVOKED",
+    targetModel: "User",
+    targetId: user._id,
+    details: { email: user.email },
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "Administrator access removed",
+  });
+});
+
 const toggleBlockUser = catchAsyncErrors(async (req, res, next) => {
   const targetId = req.params.userId;
   if (String(targetId) === String(req.user._id)) {
@@ -1058,6 +1168,9 @@ export {
   adminCreateUser,
   adminUpdateUser,
   adminDeleteUser,
+  listAdmins,
+  addAdmin,
+  removeAdmin,
   getProfile,
   getSocketToken,
   createUser,

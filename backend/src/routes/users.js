@@ -4,6 +4,7 @@ import {
   isUserAuthenticated,
   authorizePermissions,
   authorizeRoles,
+  requireSuperAdmin,
 } from "../middlewares/auth.js";
 import {
   createUser,
@@ -27,6 +28,9 @@ import {
   adminCreateUser,
   adminUpdateUser,
   adminDeleteUser,
+  listAdmins,
+  addAdmin,
+  removeAdmin,
   getProfile,
   getSocketToken,
   listHouseholdProfiles,
@@ -121,6 +125,21 @@ router.delete(
   isUserAuthenticated,
   authorizeRoles("ADMIN"),
   adminDeleteUser
+);
+
+// Administrators: any admin can see the list, only the owner can change it.
+router.get(
+  "/admins",
+  isUserAuthenticated,
+  authorizeRoles("ADMIN"),
+  listAdmins
+);
+router.post("/admins", isUserAuthenticated, requireSuperAdmin, addAdmin);
+router.delete(
+  "/admins/:id",
+  isUserAuthenticated,
+  requireSuperAdmin,
+  removeAdmin
 );
 
 router.post("/me", isUserAuthenticated, getProfile);
