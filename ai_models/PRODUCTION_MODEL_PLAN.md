@@ -12,7 +12,7 @@ security alerting system.
 | Face detection | OpenCV YuNet | MIT | Active production candidate |
 | Face recognition | OpenCV SFace | Apache-2.0 | Active production candidate after consent, gallery controls, and local threshold calibration |
 | Weapon/threat detection | RF-DETR Small | Apache-2.0 | Train on licensed CCTV data; no trustworthy permissive drop-in Guardora checkpoint was found |
-| Fire/smoke detection | RF-DETR Small | Apache-2.0 | Train on licensed day/night CCTV data; no trustworthy permissive drop-in Guardora checkpoint was found |
+| Fire/smoke detection | RF-DETR Small | Apache-2.0 | Trained on D-Fire (CC0-1.0) and active on live streams; add licensed day/night site footage before production |
 | Violence detection | X3D-M architecture (PyTorchVideo) | Apache-2.0 architecture | Retrain/fine-tune; the checked-in checkpoint has conflicting research/non-commercial wording |
 | Fall/distress detection | RTMPose + a temporal event classifier | Apache-2.0 toolkit | New labelled sequence data and training are required |
 | Vehicle/plate OCR | PaddleOCR + regional plate detector | Apache-2.0 toolkit | OCR can be reused; the plate detector must be trained for local plate layouts |
@@ -26,12 +26,13 @@ security alerting system.
   likely adapter/fine-tune before they can be treated as production-safe; no
   reliable small permissive drop-in model was identified for that gap.
 - The AI WebSocket service uses YuNet and SFace without a cloud dependency.
-- Existing YOLO weapon and fire checkpoints remain available only behind
-  `GUARDORA_ALLOW_AGPL_MODELS=true`. They are demo/evaluation models, not the
-  default production stack.
-- The current X3D checkpoint is retained for reproducibility but is not exposed
-  as a production detector until its data rights and deployment license are
-  resolved.
+- The RF-DETR Small fire/smoke model, trained on D-Fire (CC0-1.0), is active
+  on live streams and is cleared for commercial use.
+- The YOLO weapon and fire checkpoints and the X3D violence checkpoint are
+  enabled by default for development and demos but are not licensed for
+  commercial use. Set `GUARDORA_ALLOW_AGPL_MODELS=false` and
+  `GUARDORA_ALLOW_RESEARCH_MODELS=false` to run only the commercial models. See
+  `MODEL_LICENSES.md`.
 
 ## Data to build
 
