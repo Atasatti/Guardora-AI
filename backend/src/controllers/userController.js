@@ -678,6 +678,15 @@ const adminCreateUser = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler(`Role "${role}" is not valid`, 400));
   }
 
+  if (role === "ADMIN" && !isSuperAdmin(req.user)) {
+    if (req.file) {
+      removeUploadFile(req.file.filename);
+    }
+    return next(
+      new ErrorHandler("Only the owner can create administrators", 403)
+    );
+  }
+
   if (claimsOwnerEmail(email)) {
     if (req.file) {
       removeUploadFile(req.file.filename);
@@ -745,6 +754,36 @@ const adminUpdateUser = catchAsyncErrors(async (req, res, next) => {
     );
   }
 
+  const actorIsOwner = isSuperAdmin(req.user);
+  const isSelf = String(user._id) === String(req.user._id);
+  if (isSuperAdminEmail(user.email) && (accessFieldsRequested || !isSelf)) {
+    return next(
+      new ErrorHandler(
+        "The owner account is set by SUPER_ADMIN_EMAIL and cannot be changed here",
+        403
+      )
+    );
+  }
+  // Editing an administrator's email would let the editor take over their
+  // Google sign-in, so administrator accounts belong to the owner.
+  if (user.role === "ADMIN" && !actorIsOwner && !isSelf) {
+    return next(
+      new ErrorHandler("Only the owner can change administrator accounts", 403)
+    );
+  }
+  if (
+    role !== undefined &&
+    role !== user.role &&
+    (role === "ADMIN" || user.role === "ADMIN") &&
+    !actorIsOwner
+  ) {
+    return next(
+      new ErrorHandler(
+        "Only the owner can grant or revoke administrator access",
+        403
+      )
+    );
+  }
   if (email && claimsOwnerEmail(email, user.email)) {
     return next(new ErrorHandler("This email address is reserved", 400));
   }
@@ -825,6 +864,17 @@ const adminDeleteUser = catchAsyncErrors(async (req, res, next) => {
 
   if (String(user._id) === String(req.user._id)) {
     return next(new ErrorHandler("You cannot deactivate your own account", 400));
+  }
+
+  if (isSuperAdminEmail(user.email)) {
+    return next(
+      new ErrorHandler("The owner account cannot be deactivated", 403)
+    );
+  }
+  if (user.role === "ADMIN" && !isSuperAdmin(req.user)) {
+    return next(
+      new ErrorHandler("Only the owner can deactivate administrators", 403)
+    );
   }
 
   user.accountStatus = "DEACTIVATED";
