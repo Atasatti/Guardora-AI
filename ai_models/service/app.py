@@ -1,8 +1,10 @@
 """License-aware local AI WebSocket service for Guardora.
 
-YuNet, SFace and the RF-DETR fire/smoke detector are enabled by default. The
-existing Ultralytics checkpoints are disabled unless
-GUARDORA_ALLOW_AGPL_MODELS=true is explicitly set.
+Every model in the pack is enabled by default. ai_models/MODEL_LICENSES.md
+records which ones may be used commercially. For a commercial deployment set
+GUARDORA_ALLOW_AGPL_MODELS=false (Ultralytics YOLO) and
+GUARDORA_ALLOW_RESEARCH_MODELS=false (X3D violence), which leaves YuNet, SFace
+and the RF-DETR fire/smoke detector.
 """
 
 from __future__ import annotations
@@ -51,13 +53,13 @@ FACE_GALLERY_DIR = Path(
 ).resolve()
 STREAM_FPS = max(float(os.getenv("GUARDORA_STREAM_FPS", "3")), 0.25)
 FACE_COSINE_THRESHOLD = float(os.getenv("GUARDORA_FACE_COSINE_THRESHOLD", "0.363"))
-ALLOW_AGPL_MODELS = os.getenv("GUARDORA_ALLOW_AGPL_MODELS", "false").lower() in {
+ALLOW_AGPL_MODELS = os.getenv("GUARDORA_ALLOW_AGPL_MODELS", "true").lower() in {
     "1",
     "true",
     "yes",
 }
 ALLOW_RESEARCH_MODELS = os.getenv(
-    "GUARDORA_ALLOW_RESEARCH_MODELS", "false"
+    "GUARDORA_ALLOW_RESEARCH_MODELS", "true"
 ).lower() in {"1", "true", "yes"}
 BACKEND_API_URL = os.getenv(
     "GUARDORA_BACKEND_API_URL", "http://127.0.0.1:4000/api"
@@ -522,8 +524,8 @@ class DetectionRuntime:
         if not ALLOW_AGPL_MODELS:
             for model_id in YOLO_CHECKPOINTS:
                 self.errors[model_id] = (
-                    "Disabled: existing Ultralytics models require explicit "
-                    "GUARDORA_ALLOW_AGPL_MODELS=true opt-in"
+                    "Disabled by GUARDORA_ALLOW_AGPL_MODELS=false "
+                    "(AGPL-3.0 Ultralytics runtime)"
                 )
             return
 
@@ -620,8 +622,8 @@ if ALLOW_RESEARCH_MODELS:
         violence_runtime_error = f"Could not load research X3D model: {exc}"
 else:
     violence_runtime_error = (
-        "Disabled: research checkpoint requires explicit "
-        "GUARDORA_ALLOW_RESEARCH_MODELS=true opt-in"
+        "Disabled by GUARDORA_ALLOW_RESEARCH_MODELS=false "
+        "(non-commercial research checkpoint)"
     )
 
 
@@ -785,9 +787,6 @@ def health(request: Request) -> dict[str, Any]:
         },
         "violence": {
             "ready": violence_runtime is not None,
-            "mode": (
-                "research opt-in demo" if ALLOW_RESEARCH_MODELS else "disabled"
-            ),
             "error": violence_runtime_error or None,
         },
         "videoDirectory": str(VIDEO_DIR),
