@@ -11,14 +11,16 @@ import base64
 import binascii
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import partial
 import hmac
 import json
 import os
 from pathlib import Path
 import re
 import tempfile
+import threading
 import time
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 import urllib.error
 import urllib.request
 
@@ -379,41 +381,123 @@ class FaceRuntime:
         return frame, bool(alert_name), alert_name
 
 
+YOLO_CHECKPOINTS = {
+    "weapon-threat-yolov8n": (
+        "DANGEROUS_OBJECT",
+        AI_MODELS_DIR / "weapon_threat_yolov8n" / "weights" / "best.pt",
+        (50, 50, 220),
+    ),
+    "fire-smoke-yolov8n": (
+        "FIRE_SMOKE",
+        AI_MODELS_DIR / "fire_smoke_yolov8n" / "best.pt",
+        (0, 140, 255),
+    ),
+}
+
+
+@dataclass
+class Detector:
+    alert_type: str
+    predict: Callable[[np.ndarray, float], list[dict[str, Any]]]
+    stream_confidence: float
+    color: tuple[int, int, int]
+    # Lab requests run in the threadpool while streams run on the event loop,
+    # and Ultralytics predictors are not safe to share.
+    lock: threading.Lock
+
+
+def _yolo_predict(
+    model: Any, frame: np.ndarray, confidence: float
+) -> list[dict[str, Any]]:
+    result = model.predict(frame, verbose=False, conf=confidence)[0]
+    names = result.names
+    detections: list[dict[str, Any]] = []
+    for box in result.boxes:
+        class_id = int(box.cls[0].item())
+        label = (
+            str(names.get(class_id, class_id))
+            if isinstance(names, dict)
+            else str(names[class_id])
+        )
+        detections.append(
+            {
+                "label": label,
+                "confidence": round(float(box.conf[0].item()), 4),
+                "box": [round(float(value), 1) for value in box.xyxy[0].tolist()],
+            }
+        )
+    return detections
+
+
+def _draw_detections(
+    frame: np.ndarray,
+    detections: list[dict[str, Any]],
+    color: tuple[int, int, int],
+) -> None:
+    for detection in detections:
+        x1, y1, x2, y2 = (int(value) for value in detection["box"])
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(
+            frame,
+            f"{detection['label']} {detection['confidence']:.2f}",
+            (x1, max(22, y1 - 8)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            color,
+            2,
+            cv2.LINE_AA,
+        )
+
+
 class DetectionRuntime:
     def __init__(self) -> None:
-        self.models: dict[str, tuple[str, Any]] = {}
-        self.error = ""
+        self.models: dict[str, Detector] = {}
+        self.errors: dict[str, str] = {}
+        self._load_yolo()
+        self.stream_model_ids = list(self.models)
 
+    def _load_yolo(self) -> None:
         if not ALLOW_AGPL_MODELS:
-            self.error = (
-                "Disabled: existing Ultralytics models require explicit "
-                "GUARDORA_ALLOW_AGPL_MODELS=true opt-in"
-            )
+            for model_id in YOLO_CHECKPOINTS:
+                self.errors[model_id] = (
+                    "Disabled: existing Ultralytics models require explicit "
+                    "GUARDORA_ALLOW_AGPL_MODELS=true opt-in"
+                )
             return
 
-        try:
-            from ultralytics import YOLO
+        for model_id, (alert_type, path, color) in YOLO_CHECKPOINTS.items():
+            try:
+                from ultralytics import YOLO
 
-            self.models = {
-                "weapon-threat-yolov8n": (
-                    "DANGEROUS_OBJECT",
-                    YOLO(
-                        str(
-                            AI_MODELS_DIR
-                            / "weapon_threat_yolov8n"
-                            / "weights"
-                            / "best.pt"
-                        )
-                    ),
-                ),
-                "fire-smoke-yolov8n": (
-                    "FIRE_SMOKE",
-                    YOLO(str(AI_MODELS_DIR / "fire_smoke_yolov8n" / "best.pt")),
-                ),
-            }
-        except Exception as exc:  # runtime diagnostics must remain available
-            self.error = f"Could not load opt-in detection models: {exc}"
-            self.models = {}
+                model = YOLO(str(path))
+            except Exception as exc:  # runtime diagnostics must remain available
+                self.errors[model_id] = f"Could not load {model_id}: {exc}"
+                continue
+            self.models[model_id] = Detector(
+                alert_type=alert_type,
+                predict=partial(_yolo_predict, model),
+                stream_confidence=0.45,
+                color=color,
+                lock=threading.Lock(),
+            )
+
+    def error(self, model_id: str) -> str:
+        return (
+            self.errors.get(model_id)
+            or f"Model {model_id} is not enabled in this service"
+        )
+
+    def detect(
+        self, frame: np.ndarray, model_id: str, confidence: float | None = None
+    ) -> list[dict[str, Any]]:
+        detector = self.models.get(model_id)
+        if detector is None:
+            raise ValueError(self.error(model_id))
+        with detector.lock:
+            return detector.predict(
+                frame,
+                detector.stream_confidence if confidence is None else confidence,
+            )
 
     def process_selected(
         self,
@@ -422,43 +506,31 @@ class DetectionRuntime:
         *,
         confidence: float = 0.45,
     ) -> tuple[np.ndarray, list[dict[str, Any]], str]:
-        current = self.models.get(model_id)
-        if current is None:
-            raise ValueError(
-                self.error or f"Model {model_id} is not enabled in this service"
-            )
+        detections = self.detect(frame, model_id, confidence)
+        detector = self.models[model_id]
+        annotated = frame.copy()
+        _draw_detections(annotated, detections, detector.color)
+        return annotated, detections, detector.alert_type
 
-        alert_type, model = current
-        result = model.predict(frame, verbose=False, conf=confidence)[0]
-        detections: list[dict[str, Any]] = []
-        names = result.names
-        for box in result.boxes:
-            class_id = int(box.cls[0].item())
-            label = (
-                str(names.get(class_id, class_id))
-                if isinstance(names, dict)
-                else str(names[class_id])
-            )
-            coordinates = [round(float(value), 1) for value in box.xyxy[0].tolist()]
-            detections.append(
-                {
-                    "label": label,
-                    "confidence": round(float(box.conf[0].item()), 4),
-                    "box": coordinates,
-                }
-            )
-        return result.plot(), detections, alert_type
+    def detect_stream(
+        self, frame: np.ndarray
+    ) -> list[tuple[Detector, list[dict[str, Any]]]]:
+        return [
+            (self.models[model_id], self.detect(frame, model_id))
+            for model_id in self.stream_model_ids
+        ]
 
-    def process(self, frame: np.ndarray) -> tuple[np.ndarray, str]:
+    @staticmethod
+    def annotate_stream(
+        frame: np.ndarray,
+        results: list[tuple[Detector, list[dict[str, Any]]]],
+    ) -> str:
         alert_type = ""
-        annotated = frame
-        for model_id in self.models:
-            annotated, detections, current_type = self.process_selected(
-                annotated, model_id
-            )
+        for detector, detections in results:
+            _draw_detections(frame, detections, detector.color)
             if detections and not alert_type:
-                alert_type = current_type
-        return annotated, alert_type
+                alert_type = detector.alert_type
+        return alert_type
 
 
 face_runtime: FaceRuntime | None = None
@@ -489,6 +561,18 @@ else:
         "Disabled: research checkpoint requires explicit "
         "GUARDORA_ALLOW_RESEARCH_MODELS=true opt-in"
     )
+
+
+def _process_stream_frame(frame: np.ndarray) -> tuple[np.ndarray, str, str]:
+    """Run every live-stream model on the clean frame, then annotate it."""
+    detections = detection_runtime.detect_stream(frame)
+    frame, face_alert, name = (
+        face_runtime.process(frame)
+        if face_runtime is not None
+        else (frame, False, "")
+    )
+    detection_alert = detection_runtime.annotate_stream(frame, detections)
+    return frame, "BANNED_PERSON" if face_alert else detection_alert, name
 
 
 def _decode_media(value: str) -> bytes:
@@ -633,8 +717,9 @@ def health(request: Request) -> dict[str, Any]:
         },
         "detection": {
             "ready": bool(detection_runtime.models),
-            "mode": "AGPL opt-in demo" if ALLOW_AGPL_MODELS else "disabled",
-            "error": detection_runtime.error or None,
+            "models": list(detection_runtime.models),
+            "streamModels": detection_runtime.stream_model_ids,
+            "errors": detection_runtime.errors or None,
         },
         "violence": {
             "ready": violence_runtime is not None,
@@ -644,6 +729,14 @@ def health(request: Request) -> dict[str, Any]:
             "error": violence_runtime_error or None,
         },
         "videoDirectory": str(VIDEO_DIR),
+    }
+
+
+def _detector_status(model_id: str) -> dict[str, Any]:
+    ready = model_id in detection_runtime.models
+    return {
+        "status": "ready" if ready else "disabled",
+        "error": None if ready else detection_runtime.error(model_id),
     }
 
 
@@ -695,16 +788,7 @@ def lab_models() -> dict[str, Any]:
                 "description": "Detects guns, knives, grenades and explosives.",
                 "input": ["image", "video"],
                 "license": "AGPL runtime / enterprise license required",
-                "status": (
-                    "ready"
-                    if "weapon-threat-yolov8n" in detection_runtime.models
-                    else "disabled"
-                ),
-                "error": (
-                    None
-                    if "weapon-threat-yolov8n" in detection_runtime.models
-                    else detection_runtime.error
-                ),
+                **_detector_status("weapon-threat-yolov8n"),
             },
             {
                 "id": "fire-smoke-yolov8n",
@@ -712,16 +796,7 @@ def lab_models() -> dict[str, Any]:
                 "description": "Detects visible fire and smoke in CCTV frames.",
                 "input": ["image", "video"],
                 "license": "AGPL-3.0 demo only",
-                "status": (
-                    "ready"
-                    if "fire-smoke-yolov8n" in detection_runtime.models
-                    else "disabled"
-                ),
-                "error": (
-                    None
-                    if "fire-smoke-yolov8n" in detection_runtime.models
-                    else detection_runtime.error
-                ),
+                **_detector_status("fire-smoke-yolov8n"),
             },
             {
                 "id": "violence-x3d",
@@ -785,14 +860,11 @@ def run_lab_test(payload: LabTestRequest) -> dict[str, Any]:
             "annotatedFrame": _encode_jpeg(annotated),
         }
 
-    if payload.modelId in {
-        "weapon-threat-yolov8n",
-        "fire-smoke-yolov8n",
-    }:
+    if payload.modelId in YOLO_CHECKPOINTS:
         if payload.modelId not in detection_runtime.models:
             raise HTTPException(
                 status_code=503,
-                detail=detection_runtime.error or "Detection model unavailable",
+                detail=detection_runtime.error(payload.modelId),
             )
 
         if is_video:
@@ -991,13 +1063,7 @@ async def video_stream(websocket: WebSocket, video_name: str) -> None:
                 await asyncio.sleep(1 / STREAM_FPS)
                 continue
 
-            frame, face_alert, name = (
-                face_runtime.process(frame)
-                if face_runtime is not None
-                else (frame, False, "")
-            )
-            frame, detection_alert = detection_runtime.process(frame)
-            alert_type = "BANNED_PERSON" if face_alert else detection_alert
+            frame, alert_type, name = _process_stream_frame(frame)
             await websocket.send_json(
                 {
                     "frame": _encode_jpeg(frame),
@@ -1045,13 +1111,7 @@ async def camera_stream(websocket: WebSocket, camera_id: str) -> None:
                 )
                 await asyncio.sleep(1)
                 continue
-            frame, face_alert, name = (
-                face_runtime.process(frame)
-                if face_runtime is not None
-                else (frame, False, "")
-            )
-            frame, detection_alert = detection_runtime.process(frame)
-            alert_type = "BANNED_PERSON" if face_alert else detection_alert
+            frame, alert_type, name = _process_stream_frame(frame)
             await websocket.send_json(
                 {
                     "frame": _encode_jpeg(frame),
