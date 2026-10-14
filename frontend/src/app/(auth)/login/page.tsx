@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowRight, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { AuthShell } from "../_components/AuthShell";
+import { GoogleSignIn } from "../_components/GoogleSignIn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,11 @@ export default function LoginPage() {
           Sign in with your resident, moderator, or administrator account.
         </p>
       </div>
+
+      <GoogleSignIn
+        onCredential={viewModel.signInWithGoogle}
+        disabled={viewModel.loading}
+      />
 
       <form className="space-y-5" onSubmit={viewModel.submit}>
         <div className="space-y-2">

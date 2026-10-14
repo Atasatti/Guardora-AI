@@ -3,7 +3,9 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { login } from "@/lib/actions/auth";
+import { login, loginWithGoogle } from "@/lib/actions/auth";
+
+type SignInResult = { success: boolean; message: string; role?: string };
 
 export function useLoginViewModel() {
   const [email, setEmail] = useState("");
@@ -11,12 +13,7 @@ export function useLoginViewModel() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setLoading(true);
-
-    const result = await login({ email, password });
-
+  function finishSignIn(result: SignInResult) {
     if (result.success) {
       toast.success(result.message);
       router.push(result.role === "RESIDENT" ? "/resident" : "/");
@@ -27,6 +24,17 @@ export function useLoginViewModel() {
     setLoading(false);
   }
 
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    finishSignIn(await login({ email, password }));
+  }
+
+  async function signInWithGoogle(credential: string) {
+    setLoading(true);
+    finishSignIn(await loginWithGoogle(credential));
+  }
+
   return {
     email,
     password,
@@ -34,5 +42,6 @@ export function useLoginViewModel() {
     setEmail,
     setPassword,
     submit,
+    signInWithGoogle,
   };
 }
