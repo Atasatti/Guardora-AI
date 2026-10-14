@@ -9,11 +9,18 @@ import {
 } from "../config/uploads.js";
 import { MODERATOR_PERMISSIONS } from "../models/user.js";
 import { recordAudit } from "../utils/audit.js";
+import { isSuperAdminEmail } from "../utils/superAdmin.js";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
 const hashActivationCode = (code) =>
   crypto.createHash("sha256").update(String(code)).digest("hex");
+
+// Only Google sign-in may create the owner's account. Otherwise someone could
+// register the owner's address with a password of their own and inherit
+// administrator access when the owner first signs in.
+const claimsOwnerEmail = (email, currentEmail = "") =>
+  isSuperAdminEmail(email) && !isSuperAdminEmail(currentEmail);
 
 // Get current user profile
 const getProfile = catchAsyncErrors(async (req, res, next) => {
@@ -49,6 +56,13 @@ const createUser = catchAsyncErrors(async (req, res, next) => {
   if (!name || !normalizedEmail || !password || !phoneNumber || !unitNumber) {
     if (req.file) removeUploadFile(req.file.filename);
     return next(new ErrorHandler("Please provide all required fields", 400));
+  }
+
+  if (claimsOwnerEmail(normalizedEmail)) {
+    if (req.file) removeUploadFile(req.file.filename);
+    return next(
+      new ErrorHandler("This email address cannot be registered", 400)
+    );
   }
 
   const userEmail = await User.findOne({ email: normalizedEmail }).select(
@@ -326,6 +340,10 @@ const updateUserInfo = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("User not found", 404));
   }
 
+  if (email && claimsOwnerEmail(email, user.email)) {
+    return next(new ErrorHandler("This email address is reserved", 400));
+  }
+
   if (name) user.name = name;
   if (email) user.email = email;
   if (phoneNumber) user.phoneNumber = phoneNumber;
@@ -577,6 +595,13 @@ const adminCreateUser = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler(`Role "${role}" is not valid`, 400));
   }
 
+  if (claimsOwnerEmail(email)) {
+    if (req.file) {
+      removeUploadFile(req.file.filename);
+    }
+    return next(new ErrorHandler("This email address is reserved", 400));
+  }
+
   const profilePicture = req.file
     ? storedUploadPath(req.file.filename)
     : null;
@@ -635,6 +660,10 @@ const adminUpdateUser = catchAsyncErrors(async (req, res, next) => {
     return next(
       new ErrorHandler("Only administrators can change roles or access", 403)
     );
+  }
+
+  if (email && claimsOwnerEmail(email, user.email)) {
+    return next(new ErrorHandler("This email address is reserved", 400));
   }
 
   user.email = email ? String(email).trim().toLowerCase() : user.email;
