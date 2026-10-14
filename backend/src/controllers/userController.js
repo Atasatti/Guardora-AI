@@ -10,7 +10,7 @@ import {
 import { MODERATOR_PERMISSIONS } from "../models/user.js";
 import { recordAudit } from "../utils/audit.js";
 import { verifyGoogleCredential } from "../utils/googleAuth.js";
-import { isSuperAdminEmail } from "../utils/superAdmin.js";
+import { isSuperAdmin, isSuperAdminEmail } from "../utils/superAdmin.js";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
@@ -410,7 +410,7 @@ const getUserInfo = catchAsyncErrors(async (req, res, next) => {
   }
   res.status(200).json({
     success: true,
-    user,
+    user: { ...user.toJSON(), isSuperAdmin: isSuperAdmin(user) },
   });
 });
 
