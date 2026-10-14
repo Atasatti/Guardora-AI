@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { API_BASE_URL } from "../api-client";
 import {
   AccountStatus,
+  AdminSummary,
   ModeratorPermission,
   User,
   UserProfileResponse,
@@ -220,5 +221,74 @@ export async function uploadProfilePicture(formData: FormData) {
   } catch (error) {
     console.log(error);
     return { success: false, message: "Failed to upload image" };
+  }
+}
+
+export async function listAdmins() {
+  try {
+    const response = await fetchWithAuth(`${API_BASE_URL}/users/admins`);
+    const result = await handleApiResponse<{
+      ownerEmail: string | null;
+      admins: AdminSummary[];
+    }>(response);
+
+    if (result.success) {
+      return {
+        success: true as const,
+        ownerEmail: result.data.ownerEmail,
+        admins: result.data.admins,
+      };
+    }
+    return result;
+  } catch (error) {
+    return {
+      success: false as const,
+      message:
+        error instanceof Error ? error.message : "An unknown error occurred",
+    };
+  }
+}
+
+export async function addAdmin(data: { email: string; name?: string }) {
+  try {
+    const response = await fetchWithAuth(`${API_BASE_URL}/users/admins`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    const result = await handleApiResponse<{ admin: AdminSummary }>(response);
+
+    if (result.success) {
+      revalidatePath("/users");
+      return { success: true, message: "Administrator added" };
+    }
+    return result;
+  } catch (error) {
+    return {
+      success: false,
+      message:
+        error instanceof Error ? error.message : "An unknown error occurred",
+    };
+  }
+}
+
+export async function removeAdmin(userId: string) {
+  try {
+    const response = await fetchWithAuth(
+      `${API_BASE_URL}/users/admins/${userId}`,
+      { method: "DELETE" }
+    );
+    const result = await handleApiResponse<{ message: string }>(response);
+
+    if (result.success) {
+      revalidatePath("/users");
+      return { success: true, message: result.data.message };
+    }
+    return result;
+  } catch (error) {
+    return {
+      success: false,
+      message:
+        error instanceof Error ? error.message : "An unknown error occurred",
+    };
   }
 }
