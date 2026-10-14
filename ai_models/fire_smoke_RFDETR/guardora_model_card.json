@@ -1,0 +1,32 @@
+{
+  "id": "fire-smoke-rfdetr-small",
+  "task": "fire and smoke object detection",
+  "architecture": "RF-DETR Small",
+  "architecture_license": "Apache-2.0",
+  "dataset": "D-Fire",
+  "dataset_license": "CC0-1.0",
+  "classes": [
+    "smoke",
+    "fire"
+  ],
+  "epochs": 30,
+  "batch_size": 4,
+  "grad_accum_steps": 4,
+  "learning_rate": 0.0001,
+  "metrics": {
+    "final_epoch": 29,
+    "val_mAP_50": 0.8078,
+    "val_mAP_50_95": 0.4733,
+    "val_ema_mAP_50_95": 0.4806,
+    "val_precision": 0.8091,
+    "val_recall": 0.752,
+    "val_F1": 0.7794,
+    "val_AP_smoke": 0.5429,
+    "val_AP_fire": 0.4038
+  },
+  "inference_threshold": 0.3,
+  "consecutive_frames_before_alert": 3,
+  "deployable_weights": "checkpoint_best_total.pth",
+  "replaces": "fire_smoke_yolov8n (AGPL-3.0)",
+  "notes": "Trained on public data only. Site footage still required before production use."
+}
