@@ -18,6 +18,12 @@ def main() -> None:
 
     for model in manifest["models"]:
         source = model["source"]
+        if not source.get("repository"):
+            print(
+                f"Skipping {model['id']}: not published; copy its weights into "
+                f"{model['local_dir']}/ manually."
+            )
+            continue
         print(f"Downloading {model['id']} from pinned revision...")
         snapshot_download(
             repo_id=source["repository"],
