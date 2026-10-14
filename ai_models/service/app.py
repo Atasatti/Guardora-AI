@@ -1,7 +1,8 @@
 """License-aware local AI WebSocket service for Guardora.
 
-YuNet and SFace are enabled by default. The existing Ultralytics checkpoints
-are disabled unless GUARDORA_ALLOW_AGPL_MODELS=true is explicitly set.
+YuNet, SFace and the RF-DETR fire/smoke detector are enabled by default. The
+existing Ultralytics checkpoints are disabled unless
+GUARDORA_ALLOW_AGPL_MODELS=true is explicitly set.
 """
 
 from __future__ import annotations
@@ -381,6 +382,8 @@ class FaceRuntime:
         return frame, bool(alert_name), alert_name
 
 
+RFDETR_FIRE_ID = "fire-smoke-rfdetr-small"
+RFDETR_FIRE_DIR = AI_MODELS_DIR / "fire_smoke_RFDETR"
 YOLO_CHECKPOINTS = {
     "weapon-threat-yolov8n": (
         "DANGEROUS_OBJECT",
@@ -402,7 +405,7 @@ class Detector:
     stream_confidence: float
     color: tuple[int, int, int]
     # Lab requests run in the threadpool while streams run on the event loop,
-    # and Ultralytics predictors are not safe to share.
+    # and neither Ultralytics nor RF-DETR predictors are safe to share.
     lock: threading.Lock
 
 
@@ -424,6 +427,32 @@ def _yolo_predict(
                 "label": label,
                 "confidence": round(float(box.conf[0].item()), 4),
                 "box": [round(float(value), 1) for value in box.xyxy[0].tolist()],
+            }
+        )
+    return detections
+
+
+def _rfdetr_predict(
+    model: Any, class_names: list[str], frame: np.ndarray, confidence: float
+) -> list[dict[str, Any]]:
+    # RF-DETR expects RGB input; OpenCV frames are BGR.
+    result = model.predict(
+        cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), threshold=confidence
+    )
+    detections: list[dict[str, Any]] = []
+    for box, class_id, score in zip(
+        result.xyxy, result.class_id, result.confidence
+    ):
+        class_id = int(class_id)
+        detections.append(
+            {
+                "label": (
+                    class_names[class_id]
+                    if 0 <= class_id < len(class_names)
+                    else str(class_id)
+                ),
+                "confidence": round(float(score), 4),
+                "box": [round(float(value), 1) for value in box],
             }
         )
     return detections
@@ -453,8 +482,41 @@ class DetectionRuntime:
     def __init__(self) -> None:
         self.models: dict[str, Detector] = {}
         self.errors: dict[str, str] = {}
+        self._load_rfdetr()
         self._load_yolo()
-        self.stream_model_ids = list(self.models)
+        # RF-DETR replaces the YOLO fire model on live streams so a frame is
+        # never annotated with two sets of fire boxes. Both stay in the AI Lab.
+        self.stream_model_ids = [
+            model_id
+            for model_id in self.models
+            if not (model_id == "fire-smoke-yolov8n" and RFDETR_FIRE_ID in self.models)
+        ]
+
+    def _load_rfdetr(self) -> None:
+        try:
+            card = json.loads(
+                (RFDETR_FIRE_DIR / "guardora_model_card.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            from rfdetr import RFDETR
+
+            model = RFDETR.from_checkpoint(
+                str(RFDETR_FIRE_DIR / card["deployable_weights"])
+            )
+        except Exception as exc:  # runtime diagnostics must remain available
+            self.errors[RFDETR_FIRE_ID] = (
+                f"Could not load RF-DETR fire/smoke model: {exc}"
+            )
+            return
+
+        self.models[RFDETR_FIRE_ID] = Detector(
+            alert_type="FIRE_SMOKE",
+            predict=partial(_rfdetr_predict, model, list(model.class_names)),
+            stream_confidence=float(card["inference_threshold"]),
+            color=(0, 140, 255),
+            lock=threading.Lock(),
+        )
 
     def _load_yolo(self) -> None:
         if not ALLOW_AGPL_MODELS:
@@ -754,6 +816,11 @@ def models() -> dict[str, Any]:
                 "license": "Apache-2.0",
                 "status": "ready" if face_runtime else "error",
             },
+            {
+                "id": RFDETR_FIRE_ID,
+                "license": "Apache-2.0",
+                "status": _detector_status(RFDETR_FIRE_ID)["status"],
+            },
         ],
         "restricted": [
             {
@@ -774,7 +841,7 @@ def models() -> dict[str, Any]:
                 ),
             },
         ],
-        "trainingRequired": ["RF-DETR fire/smoke", "RF-DETR weapon/threat", "X3D violence"],
+        "trainingRequired": ["RF-DETR weapon/threat", "X3D violence"],
     }
 
 
@@ -791,8 +858,16 @@ def lab_models() -> dict[str, Any]:
                 **_detector_status("weapon-threat-yolov8n"),
             },
             {
+                "id": RFDETR_FIRE_ID,
+                "name": "Fire & smoke detection (RF-DETR)",
+                "description": "Detects visible fire and smoke; used on live streams.",
+                "input": ["image", "video"],
+                "license": "Apache-2.0 (D-Fire CC0 data)",
+                **_detector_status(RFDETR_FIRE_ID),
+            },
+            {
                 "id": "fire-smoke-yolov8n",
-                "name": "Fire & smoke detection",
+                "name": "Fire & smoke detection (YOLOv8n)",
                 "description": "Detects visible fire and smoke in CCTV frames.",
                 "input": ["image", "video"],
                 "license": "AGPL-3.0 demo only",
@@ -860,7 +935,7 @@ def run_lab_test(payload: LabTestRequest) -> dict[str, Any]:
             "annotatedFrame": _encode_jpeg(annotated),
         }
 
-    if payload.modelId in YOLO_CHECKPOINTS:
+    if payload.modelId in {RFDETR_FIRE_ID, *YOLO_CHECKPOINTS}:
         if payload.modelId not in detection_runtime.models:
             raise HTTPException(
                 status_code=503,
