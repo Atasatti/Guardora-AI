@@ -10,6 +10,7 @@ import ErrorHandler from "../utils/ErrorHandler.js";
 const APPROVED_MODELS = new Set([
   "granite3-guardian-2b",
   "weapon-threat-yolov8n",
+  "fire-smoke-rfdetr-small",
   "fire-smoke-yolov8n",
   "violence-x3d",
   "face-recognition-sface",
