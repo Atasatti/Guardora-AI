@@ -32,6 +32,11 @@ def main() -> int:
             label = f"{model['id']}: {weight['path']}"
 
             if not path.is_file():
+                # Unpublished weights cannot be re-downloaded, so a clone
+                # without them is expected; the service reports the gap.
+                if not model["source"].get("repository"):
+                    print(f"SKIP  {label} is missing (unpublished; copy manually)")
+                    continue
                 failures.append(f"{label} is missing")
                 continue
 
