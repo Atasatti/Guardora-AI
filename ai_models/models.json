@@ -54,6 +54,27 @@
       ]
     },
     {
+      "id": "fire-smoke-rfdetr-small",
+      "task": "fire and smoke object detection",
+      "local_dir": "fire_smoke_RFDETR",
+      "license": "Apache-2.0 (RF-DETR Small), trained by Guardora on D-Fire (CC0-1.0)",
+      "deployment_status": "production_candidate",
+      "source": {
+        "provider": "Guardora training run (not published)",
+        "repository": null,
+        "revision": null
+      },
+      "download_patterns": [],
+      "weights": [
+        {
+          "path": "fire_smoke_RFDETR/checkpoint_best_total.pth",
+          "format": "RF-DETR checkpoint",
+          "bytes": 127380711,
+          "sha256": "165ee83470f0353c21cf5375d6d46932395533399190fa986f5f962e77dd4c46"
+        }
+      ]
+    },
+    {
       "id": "violence-x3d",
       "task": "video violence classification",
       "local_dir": "violence_x3d",
