@@ -263,20 +263,30 @@ export default function SettingsClient({ user }: Props) {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
-                <div>
-                  <h4 className="text-sm font-medium">Change Password</h4>
+              {user.authProvider === "GOOGLE" ? (
+                <div className="p-4 border rounded-lg bg-muted/20">
+                  <h4 className="text-sm font-medium">Signed in with Google</h4>
                   <p className="text-xs text-muted-foreground">
-                    Update your credentials securely.
+                    This account has no password. Manage its security in
+                    your Google account.
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsPasswordModalOpen(true)}
-                >
-                  Update Password
-                </Button>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
+                  <div>
+                    <h4 className="text-sm font-medium">Change Password</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Update your credentials securely.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsPasswordModalOpen(true)}
+                  >
+                    Update Password
+                  </Button>
+                </div>
+              )}
 
               <div className="flex items-center justify-between p-4 border border-destructive/20 rounded-lg bg-destructive/5">
                 <div>
